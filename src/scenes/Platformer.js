@@ -25,20 +25,25 @@ class Platformer extends Phaser.Scene {
         this.SCALE = 3.0; // 2.0
     }
 
+        //TODO LIST
+        //dif levels
+        //finish flags
+
+        //lvl2, clear the path to have space for reaching high velocity
+            //at high velocity, ur able to break boxes and reach the end
+
+
     create() {
         //very important go to section thurs in order to get code for completing section
         //added audio
-        //this.load.audio('jetpackJump', 'explosionCrunch_000.ogg');
-        //this.load.audio('hover', 'assets/spaceEngineLow_000.ogg');
-
-
+       
         //State machine variables
         this.state = Object ({
             Idle: 'Idle',
             Running: 'Running',
             Jumping: 'Jumping',
             Falling: 'Falling',
-            Hovering: 'Hovering'
+            Rolling: 'Rolling'
         });
 
         this.playerState = this.state.Idle;
@@ -46,13 +51,15 @@ class Platformer extends Phaser.Scene {
         this.landed = false;
         this.jumped = false;
 
-        this.marbleActive = false;
+        this.marbleActive = true;
 
-        this.label = this.add.text(100, 100, this.hasJetpack, {  //this.playerState
+        this.label = this.add.text(100, 100, this.playerState, {  //this.playerState
         fontFamily: 'Arial', 
         fontSize: '12px', 
         color: '#ffffff' 
         });
+
+      
 
         // Create a new tilemap game object which uses 18x18 pixel tiles, and is
         // 45 tiles wide and 25 tiles tall.
@@ -71,12 +78,33 @@ class Platformer extends Phaser.Scene {
             collides: true
         });
 
-        // TODO: Add createFromObjects here //for coins
-        
-        
+        this.boxesLayer = this.map.createLayer("BoxesLayer", this.tileset, 0, 0);
 
-        // TODO: Add turn into Arcade Physics here //for coins also
-        
+        // Make it collidable
+        this.boxesLayer.setCollisionByProperty({
+            collides: true
+        });
+
+        this.flagLayer = this.map.createLayer("FlagLayer", this.tileset, 0, 0);
+
+
+        // TODO: Add createFromObjects here //for coins
+         // Create coins from Objects layer in tilemap
+        this.coins = this.map.createFromObjects("Coins", {
+            name: "coin",
+            key: "tilemap_sheet",
+            frame: 151
+        });
+
+        this.physics.world.enable(this.coins, Phaser.Physics.Arcade.STATIC_BODY);
+
+        // Create a Phaser group out of the array this.coins
+        // This will be used for collision detection below.
+        this.coinGroup = this.add.group(this.coins);
+
+        //marble sprite
+        my.sprite.marble = this.add.sprite(30, 347, "kenny-particles", "circle_01.png");
+        my.sprite.marble.setScale(0.08);     
 
         // set up player avatar
         my.sprite.player = this.physics.add.sprite(30, 345, "platformer_characters", "tile_0000.png");
@@ -89,12 +117,33 @@ class Platformer extends Phaser.Scene {
         // Enable collision handling
         this.physics.add.collider(my.sprite.player, this.groundLayer);
 
-        //marble sprite
-        my.sprite.marble = this.add.sprite(30, 347, "kenny-particles", "circle_01.png");
-        my.sprite.marble.setScale(0.08);
+        this.boxesCollision = this.physics.add.collider(my.sprite.player, this.boxesLayer);
 
-        // TODO: Add coin collision handler
-        
+        this.boxesOverlap = this.physics.add.overlap(
+            my.sprite.player, 
+            this.boxesLayer, 
+            this.breakTile, 
+            null, 
+            this
+        );
+
+        // TODO: Add turn into Arcade Physics here //for coins also
+        this.physics.add.overlap(my.sprite.player, this.coinGroup, (obj1, obj2) => {
+            obj2.enableFilters();
+            const coinFX = obj2.filters.internal.addGlow();
+            coinFX.setPaddingOverride(null);
+            this.tweens.add({
+                targets: coinFX,
+                outerStrength: 1,
+                yoyo: true,
+                loop: 1,
+                duration: 10,
+                ease: 'sine.inout',
+                onComplete: () => { //onComplete: function() { also works
+                obj2.destroy();
+                }
+            });
+        });        
 
         // set up Phaser-provided cursor key input
         cursors = this.input.keyboard.createCursorKeys();
@@ -108,16 +157,12 @@ class Platformer extends Phaser.Scene {
         this.dKey = this.input.keyboard.addKey('D');
 
         // debug key listener (assigned to D key)
-        //this.input.keyboard.on('keydown-C', () => {
-        //    this.physics.world.drawDebug = this.physics.world.drawDebug ? false : true
-        //    this.physics.world.debugGraphic.clear()
-        //}, this);
+        this.input.keyboard.on('keydown-C', () => {
+            this.physics.world.drawDebug = this.physics.world.drawDebug ? false : true
+            this.physics.world.debugGraphic.clear()
+        }, this);
         this.physics.world.drawDebug = false;
         this.physics.world.debugGraphic.clear();
-
-        //this.input.keyboard.on('keydown-S', () => {
-        //    this.hasJetpack = this.hasJetpack ? false : true
-        //}, this);
 
         // TODO: Add movement vfx here
         my.vfx.walking = this.add.particles(0, 0, "kenny-particles", {
@@ -143,19 +188,21 @@ class Platformer extends Phaser.Scene {
         this.cameras.main.setDeadzone(50, 50);
         this.cameras.main.setZoom(this.SCALE);
         let camera = this.cameras.main;
-        const camFX = camera.filters.internal.addPixelate(0.5);
+        const camFX = camera.filters.internal.addPixelate(1); //0.5
 
         this.facingLeft = false;
 
-        //this.playerAndJetpack.add([my.sprite.player, my.sprite.jetpack]) //(for moving both without delay)
-
-
-        this.events.on('prerender', this.preRender, this); //used for syncing jetpack and player
+        this.events.on('prerender', this.preRender, this); //used for syncing marble and player
                                                             //https://phaser.io/sandbox/XuEw4pCW
 
 
         //make a group of boxes with similar logic to coins except can only be collected at high speeds
         //when collision not at high speeds, block player movement (use physics engine?)
+        this.boxCollisionFlag = false;
+
+        this.flagCheck = this.add.sprite(220, 275, "kenny-particles", "circle_01.png");
+        this.flagCheck.setScale(0.06); 
+        
                             
     }
     //for water, add a water property to water tiles in tiled
@@ -163,11 +210,25 @@ class Platformer extends Phaser.Scene {
     update(time, delta) {
         this.label.x = my.sprite.player.x + 15;
         this.label.y = my.sprite.player.y - 30;
-        this.label.setText('');
-
+        this.label.setText(this.playerState);
         
         //when player dies, launch sprite in opposite direction, rotate sprite similar to minecraft death anim
 
+        if (my.sprite.player.body.velocity.x <=  -400) {
+            if (this.boxCollisionFlag == false)
+                this.boxCollisionFlag = true;
+                this.boxesCollision.active = false;
+                //switch off collision
+           
+        } else if (my.sprite.player.body.velocity.x >=  400) {
+            if (this.boxCollisionFlag == false)
+                this.boxCollisionFlag = true;
+                this.boxesCollision.active = false;
+                //switch off collision
+        } else {
+            this.boxCollisionFlag = false;
+            this.boxesCollision.active = true;
+        }
 
         if (my.sprite.player.body.blocked.down) {
             if (my.sprite.player.flipX == true) { //was my.sprite.player.body.velocity.x > 0
@@ -182,10 +243,7 @@ class Platformer extends Phaser.Scene {
             my.sprite.player.body.velocity.x = Phaser.Math.Clamp(my.sprite.player.body.velocity.x, -this.velocityCap, this.velocityCap);
         }
 
-        //if player is next to jetpack (and on ground), allow sKey press switch jetpack
-        //if player is on ground and has jetpack, allow sKey press switch jetpack
-            //place jetpack object on players location
-        if (Phaser.Input.Keyboard.JustDown(this.sKey)) {
+        if (Phaser.Input.Keyboard.JustDown(this.sKey) && (this.collides(my.sprite.player, my.sprite.marble)) && (my.sprite.player.body.blocked.down)) {
             this.marbleActive = this.marbleActive ? false : true
         }
 
@@ -258,7 +316,11 @@ class Platformer extends Phaser.Scene {
         //rework animations so that if player is on floor and velocity x is not 0, play run anim
         if((my.sprite.player.body.blocked.down) && (my.sprite.player.body.velocity.x != 0)){
             //this.playerState = this.state.Running;
-            this.setState(this.state.Running);
+            if (this.marbleActive == true) {
+                this.setState(this.state.Rolling)
+            } else {
+                 this.setState(this.state.Running);
+            }
             if (this.marbleActive == false) {
                 my.sprite.player.anims.play('walk', true);
             } else {
@@ -307,11 +369,22 @@ class Platformer extends Phaser.Scene {
             this.scene.restart();
         }
 
+        this.flagPoint();
+
     }
     collides(a, b) {
         if (Math.abs(a.x - b.x) > (a.displayWidth/2 + b.displayWidth/2)) return false;
         if (Math.abs(a.y - b.y) > (a.displayHeight/2 + b.displayHeight/2)) return false;
         return true;
+    }
+    breakTile(player, tile) {
+        this.boxesLayer.removeTileAt(tile.x, tile.y);
+    }
+    flagPoint() {
+        if (this.collides(my.sprite.player, this.flagCheck)) {
+
+            this.scene.start('MainMenu');
+        }
     }
     setState(newState){
         this.prevState = this.playerState;

@@ -27,10 +27,6 @@ class Load extends Phaser.Scene {
         // Particle Pack asset pack.
         this.load.multiatlas("kenny-particles", "kenny-particles.json");
 
-        //my own added textures
-        this.load.image('jetpack', 'spaceMissiles_012.png');
-        this.load.image('flame1', 'explosion00.png');
-        this.load.image('flame2', 'explosion01.png');
     }
 
     create() {

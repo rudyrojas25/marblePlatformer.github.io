@@ -33,7 +33,7 @@ let config = {
     height: 900, //900
     scale: {autoCenter: Phaser.Scale.CENTER_BOTH},
     backgroundColor: '#232c34',
-    scene: [Load, Platformer]
+    scene: [MainMenu, Load, Platformer]
 }
 
 var cursors;
